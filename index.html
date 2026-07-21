@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Core Drop — Web Prototip</title>
+<meta name="theme-color" content="#060b12">
+<meta name="description" content="Küreyi sen hareket ettirmiyorsun, kuleyi döndürüyorsun. Boşluğu küreyle hizala, çekirdeğe ulaş.">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+  :root {
+    --bg-deep: #060b12;
+    --bg-panel: #0c1620;
+    --glow-cyan: #3fe8c4;
+    --glow-cyan-dim: #1f6e5f;
+    --glow-violet: #b14fff;
+    --text-soft: #e7f3f0;
+    --text-dim: #7fa79c;
+  }
+
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    height: 100dvh;
+    background: var(--bg-deep);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: none;
+  }
+
+  #stage {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+      radial-gradient(ellipse at 50% 20%, rgba(63,232,196,0.08), transparent 60%),
+      var(--bg-deep);
+  }
+
+  #frame {
+    position: relative;
+    width: min(100vw, 430px);
+    height: 100vh;
+    height: 100dvh;
+    max-height: 900px;
+    background: linear-gradient(180deg, var(--bg-panel) 0%, #050a0f 100%);
+    overflow: hidden;
+    touch-action: none;
+    border-left: 1px solid rgba(63,232,196,0.08);
+    border-right: 1px solid rgba(63,232,196,0.08);
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+  }
+
+  .hud {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: calc(18px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) 18px calc(20px + env(safe-area-inset-left));
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  .hud-label {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin: 0 0 2px 0;
+  }
+
+  .hud-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-soft);
+    letter-spacing: 0.02em;
+  }
+
+  .hud-value span {
+    color: var(--glow-cyan);
+  }
+
+  .reset-btn {
+    pointer-events: all;
+    background: rgba(63,232,196,0.08);
+    border: 1px solid rgba(63,232,196,0.35);
+    color: var(--glow-cyan);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 8px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .reset-btn:active { background: rgba(63,232,196,0.2); }
+
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 40px;
+    background: radial-gradient(ellipse at 50% 40%, rgba(11,25,32,0.92), rgba(3,7,10,0.97));
+    z-index: 10;
+    transition: opacity 0.4s ease;
+  }
+
+  .overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .overlay h1 {
+    font-size: 30px;
+    color: var(--text-soft);
+    margin: 0 0 6px 0;
+    letter-spacing: 0.02em;
+  }
+
+  .overlay .accent { color: var(--glow-cyan); text-shadow: 0 0 18px rgba(63,232,196,0.55); }
+  .overlay.win .accent { color: var(--glow-violet); text-shadow: 0 0 18px rgba(177,79,255,0.55); }
+  .overlay.lose .accent { color: #ff6b6b; text-shadow: 0 0 18px rgba(255,107,107,0.55); }
+
+  .overlay p {
+    font-size: 14px;
+    color: var(--text-dim);
+    line-height: 1.6;
+    max-width: 280px;
+    margin: 0 0 28px 0;
+  }
+
+  .overlay .stat {
+    font-size: 15px;
+    color: var(--text-soft);
+    margin-bottom: 24px;
+  }
+
+  .primary-btn {
+    background: linear-gradient(135deg, var(--glow-cyan), #29b39a);
+    color: #04140f;
+    border: none;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 14px 34px;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: 0 0 24px rgba(63,232,196,0.35);
+  }
+  .primary-btn:active { transform: scale(0.97); }
+
+  .overlay.win .primary-btn {
+    background: linear-gradient(135deg, var(--glow-violet), #7a2fd6);
+    box-shadow: 0 0 24px rgba(177,79,255,0.4);
+  }
+
+  .overlay.lose .primary-btn {
+    background: linear-gradient(135deg, #ff6b6b, #c23a3a);
+    box-shadow: 0 0 24px rgba(255,107,107,0.4);
+  }
+
+  .drag-hint {
+    position: absolute;
+    bottom: calc(26px + env(safe-area-inset-bottom));
+    left: 0; right: 0;
+    text-align: center;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    z-index: 4;
+    pointer-events: none;
+    opacity: 0.75;
+  }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <div id="frame">
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="hud">
+      <div>
+        <p class="hud-label">Kat</p>
+        <p class="hud-value"><span id="ringCount">0</span> / <span id="ringTotal">18</span></p>
+      </div>
+      <button class="reset-btn" id="resetBtn">Sıfırla</button>
+    </div>
+
+    <div class="drag-hint" id="dragHint">Sürükle — sağa / sola döndür</div>
+
+    <div class="overlay" id="startOverlay">
+      <h1>CORE <span class="accent">DROP</span></h1>
+      <p>Küreyi sen hareket ettirmiyorsun — kuleyi döndürüyorsun. Parmağını sağa veya sola sürükle, boşluğu küreyle hizala.</p>
+      <button class="primary-btn" id="startBtn">Başlat</button>
+    </div>
+
+    <div class="overlay win hidden" id="winOverlay">
+      <h1>ÇEKİRDEĞE <span class="accent">ULAŞTIN</span></h1>
+      <p class="stat"><span id="finalCount">18</span> kat başarıyla geçildi.</p>
+      <button class="primary-btn" id="playAgainBtn">Tekrar Oyna</button>
+    </div>
+
+    <div class="overlay lose hidden" id="loseOverlay">
+      <h1>KULE <span class="accent">SENİ DURDURDU</span></h1>
+      <p class="stat"><span id="loseCount">0</span> kat geçildi.</p>
+      <button class="primary-btn" id="retryBtn">Tekrar Dene</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- Ayarlar (Inspector'daki SerializeField alanlarının web karşılığı) ----
+  const RING_COUNT = 100;
+  const RING_SPACING = 180;
+  const RING_RADIUS_X_RATIO = 0.34;
+  const RING_RADIUS_Y_RATIO = 0.085;
+  const BASE_FALL_SPEED = 100;
+  const FALL_SPEED_INCREMENT = 1.6;
+  const MAX_FALL_SPEED = 320;
+  const BALL_SCREEN_Y_RATIO = 0.38;
+  const SENSITIVITY = 0.016;
+  const MAX_ROTATION_SPEED = 5.2;
+  const MIN_DRAG_THRESHOLD_PX = 6;
+  const EASY_RING_COUNT = 8;
+  const EASY_GAP_HALF = 0.95;
+  const START_GAP_HALF = 0.8;
+  const MIN_GAP_HALF = 0.4;
+  const DIFFICULTY_RAMP_RINGS = 120;
+  const HUE_STEP_PER_RING = 4.2;
+  const HUE_START = 178;
+
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+  const frame = document.getElementById("frame");
+  const ringCountEl = document.getElementById("ringCount");
+  const ringTotalEl = document.getElementById("ringTotal");
+  const finalCountEl = document.getElementById("finalCount");
+  const loseCountEl = document.getElementById("loseCount");
+  const startOverlay = document.getElementById("startOverlay");
+  const winOverlay = document.getElementById("winOverlay");
+  const loseOverlay = document.getElementById("loseOverlay");
+  const startBtn = document.getElementById("startBtn");
+  const playAgainBtn = document.getElementById("playAgainBtn");
+  const retryBtn = document.getElementById("retryBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const dragHint = document.getElementById("dragHint");
+
+  ringTotalEl.textContent = String(RING_COUNT);
+
+  let canvasWidth = 0;
+  let canvasHeight = 0;
+
+  let rings = [];
+  let ballY = 0;
+  let towerRotation = 0;
+  let rotationSpeed = 0;
+  let ringsPassed = 0;
+  let isRunning = false;
+  let hasWon = false;
+  let hasLost = false;
+  let trail = [];
+
+  let isDragging = false;
+  let dragStartX = 0;
+
+  function normalizeAngle(angle) {
+    const twoPi = Math.PI * 2;
+    return ((angle % twoPi) + twoPi) % twoPi;
+  }
+
+  function angularDiff(a, b) {
+    let diff = normalizeAngle(a - b);
+    if (diff > Math.PI) diff -= Math.PI * 2;
+    return diff;
+  }
+
+  function resizeCanvas() {
+    canvasWidth = frame.clientWidth;
+    canvasHeight = frame.clientHeight;
+    canvas.width = canvasWidth * window.devicePixelRatio;
+    canvas.height = canvasHeight * window.devicePixelRatio;
+    ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+  }
+
+  function buildRings() {
+    rings = [];
+    for (let i = 0; i < RING_COUNT; i++) {
+      const isFinish = i === RING_COUNT - 1;
+      const isEasy = i < EASY_RING_COUNT;
+
+      let gapHalf;
+      if (isFinish) {
+        gapHalf = Math.PI * 0.85;
+      } else if (isEasy) {
+        gapHalf = EASY_GAP_HALF;
+      } else {
+        const rampProgress = Math.min(1, (i - EASY_RING_COUNT) / DIFFICULTY_RAMP_RINGS);
+        gapHalf = START_GAP_HALF + (MIN_GAP_HALF - START_GAP_HALF) * rampProgress;
+      }
+
+      rings.push({
+        y: (i + 1) * RING_SPACING,
+        gapCenter: Math.random() * Math.PI * 2,
+        gapHalf: gapHalf,
+        passed: false,
+        isFinish: isFinish,
+        hue: (HUE_START + i * HUE_STEP_PER_RING) % 360
+      });
+    }
+  }
+
+  function resetGame() {
+    buildRings();
+    ballY = 0;
+    towerRotation = 0;
+    rotationSpeed = 0;
+    ringsPassed = 0;
+    hasWon = false;
+    hasLost = false;
+    trail = [];
+    ringCountEl.textContent = "0";
+    winOverlay.classList.add("hidden");
+    loseOverlay.classList.add("hidden");
+  }
+
+  function startGame() {
+    resetGame();
+    isRunning = true;
+    startOverlay.classList.add("hidden");
+  }
+
+  function triggerWin() {
+    isRunning = false;
+    hasWon = true;
+    finalCountEl.textContent = String(ringsPassed);
+    setTimeout(() => winOverlay.classList.remove("hidden"), 350);
+  }
+
+  function triggerLose() {
+    isRunning = false;
+    hasLost = true;
+    loseCountEl.textContent = String(ringsPassed);
+    setTimeout(() => loseOverlay.classList.remove("hidden"), 350);
+  }
+
+  // ---- Girdi: ilk dokunma noktası ile mevcut nokta arasındaki fark ----
+  function beginDrag(clientX) {
+    isDragging = true;
+    dragStartX = clientX;
+    dragHint.style.opacity = "0";
+  }
+
+  function updateDrag(clientX) {
+    if (!isDragging) return;
+    const offset = clientX - dragStartX;
+    if (Math.abs(offset) < MIN_DRAG_THRESHOLD_PX) {
+      rotationSpeed = 0;
+      return;
+    }
+    const speed = offset * SENSITIVITY;
+    rotationSpeed = Math.max(-MAX_ROTATION_SPEED, Math.min(MAX_ROTATION_SPEED, speed));
+  }
+
+  function endDrag() {
+    isDragging = false;
+    rotationSpeed = 0;
+  }
+
+  canvas.addEventListener("pointerdown", (e) => {
+    if (!isRunning) return;
+    beginDrag(e.clientX);
+  });
+  window.addEventListener("pointermove", (e) => {
+    if (!isRunning) return;
+    updateDrag(e.clientX);
+  });
+  window.addEventListener("pointerup", endDrag);
+  window.addEventListener("pointercancel", endDrag);
+
+  document.body.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+  document.body.addEventListener("gesturestart", (e) => e.preventDefault());
+
+  startBtn.addEventListener("click", startGame);
+  playAgainBtn.addEventListener("click", startGame);
+  retryBtn.addEventListener("click", startGame);
+  resetBtn.addEventListener("click", () => {
+    if (!isRunning && !hasWon && !hasLost) return;
+    resetGame();
+    isRunning = true;
+  });
+
+  window.addEventListener("resize", resizeCanvas);
+
+  // ---- Güncelleme ----
+  let lastTime = performance.now();
+
+  function update(dt) {
+    towerRotation = normalizeAngle(towerRotation + rotationSpeed * dt);
+
+    const nextRing = rings.find(r => !r.passed);
+    if (!nextRing) return;
+
+    const currentFallSpeed = Math.min(MAX_FALL_SPEED, BASE_FALL_SPEED + ringsPassed * FALL_SPEED_INCREMENT);
+    const prevY = ballY;
+    ballY += currentFallSpeed * dt;
+
+    if (prevY < nextRing.y && ballY >= nextRing.y) {
+      const ballAngle = Math.PI / 2;
+      const gapCenterAbs = normalizeAngle(nextRing.gapCenter + towerRotation);
+      const diff = angularDiff(ballAngle, gapCenterAbs);
+
+      if (Math.abs(diff) <= nextRing.gapHalf) {
+        nextRing.passed = true;
+        ringsPassed++;
+        ringCountEl.textContent = String(ringsPassed);
+        if (nextRing.isFinish) {
+          triggerWin();
+        }
+      } else {
+        triggerLose();
+      }
+    }
+
+    trail.push({ y: ballY, life: 1 });
+    if (trail.length > 14) trail.shift();
+    trail.forEach(t => t.life -= dt * 2.2);
+    trail = trail.filter(t => t.life > 0);
+  }
+
+  // ---- Çizim ----
+  function drawRing(ring, cameraY) {
+    const screenY = ring.y - cameraY;
+    if (screenY < -80 || screenY > canvasHeight + 80) return;
+
+    const rx = canvasWidth * RING_RADIUS_X_RATIO;
+    const ry = canvasHeight * RING_RADIUS_Y_RATIO;
+    const cx = canvasWidth / 2;
+
+    const gapCenterAbs = normalizeAngle(ring.gapCenter + towerRotation);
+    const gapStart = gapCenterAbs - ring.gapHalf;
+    const gapEnd = gapCenterAbs + ring.gapHalf;
+
+    const hue = ring.isFinish ? 280 : ring.hue;
+    const saturation = ring.isFinish ? 90 : 78;
+    const lightness = ring.isFinish ? 66 : 58;
+    const alpha = Math.max(0.18, 1 - Math.abs(screenY - canvasHeight * BALL_SCREEN_Y_RATIO) / (canvasHeight * 0.9));
+
+    ctx.beginPath();
+    ctx.ellipse(cx, screenY, rx, ry, 0, gapEnd, gapStart + Math.PI * 2);
+    ctx.strokeStyle = `hsla(${hue},${saturation}%,${lightness}%,${alpha})`;
+    ctx.lineWidth = ring.isFinish ? 7 : 5;
+    ctx.shadowColor = `hsla(${hue},${saturation}%,${lightness}%,0.9)`;
+    ctx.shadowBlur = ring.isFinish ? 22 : 12;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    if (ring.isFinish) {
+      ctx.font = "600 11px sans-serif";
+      ctx.fillStyle = `hsla(${hue},${saturation}%,${lightness}%,${alpha})`;
+      ctx.textAlign = "center";
+      ctx.fillText("ÇEKİRDEK", cx, screenY - ry - 10);
+    }
+  }
+
+  function drawShaft() {
+    const rx = canvasWidth * RING_RADIUS_X_RATIO;
+    const cx = canvasWidth / 2;
+
+    const fillGradient = ctx.createLinearGradient(cx - rx, 0, cx + rx, 0);
+    fillGradient.addColorStop(0, "rgba(255,255,255,0)");
+    fillGradient.addColorStop(0.5, "rgba(255,255,255,0.04)");
+    fillGradient.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = fillGradient;
+    ctx.fillRect(cx - rx, 0, rx * 2, canvasHeight);
+
+    ctx.strokeStyle = "rgba(255,255,255,0.09)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx - rx, 0);
+    ctx.lineTo(cx - rx, canvasHeight);
+    ctx.moveTo(cx + rx, 0);
+    ctx.lineTo(cx + rx, canvasHeight);
+    ctx.stroke();
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+    const cameraY = ballY - canvasHeight * BALL_SCREEN_Y_RATIO;
+    const ballScreenX = canvasWidth / 2;
+    const ballScreenY = canvasHeight * BALL_SCREEN_Y_RATIO;
+
+    drawShaft();
+
+    rings.forEach(r => drawRing(r, cameraY));
+
+    // İz
+    trail.forEach(t => {
+      const sy = t.y - cameraY;
+      ctx.beginPath();
+      ctx.arc(ballScreenX, sy, 7 * t.life, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(63,232,196,${t.life * 0.3})`;
+      ctx.fill();
+    });
+
+    // Top
+    const ballGradient = ctx.createRadialGradient(
+      ballScreenX - 3, ballScreenY - 3, 1,
+      ballScreenX, ballScreenY, 14
+    );
+    ballGradient.addColorStop(0, "#eafff8");
+    ballGradient.addColorStop(0.5, "#3fe8c4");
+    ballGradient.addColorStop(1, "rgba(63,232,196,0.15)");
+    ctx.beginPath();
+    ctx.arc(ballScreenX, ballScreenY, 10, 0, Math.PI * 2);
+    ctx.fillStyle = ballGradient;
+    ctx.shadowColor = "rgba(63,232,196,0.8)";
+    ctx.shadowBlur = 18;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  function loop(now) {
+    const dt = Math.min(0.033, (now - lastTime) / 1000);
+    lastTime = now;
+
+    if (isRunning) {
+      update(dt);
+    }
+    draw();
+
+    requestAnimationFrame(loop);
+  }
+
+  resizeCanvas();
+  buildRings();
+  requestAnimationFrame(loop);
+
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch(() => {});
+    });
+  }
+})();
+</script>
+
+</body>
+</html>
